@@ -1,0 +1,11 @@
+{
+  "dataset_order_sha256": "0ee4cc216c2b91b02a657685102ba1a6962ac13c0bcd18438cf656873651ba4e",
+  "dataset_revision": "740312add88f781978c0658806c59bc2815b9866",
+  "math_verify_version": "0.9.0",
+  "saved_prompt_hashes_validated": true,
+  "target_model": "Qwen/Qwen3-4B",
+  "target_revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "task": "gsm8k",
+  "tokenizer_revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "validated_prompt_method_pairs": 1536
+}

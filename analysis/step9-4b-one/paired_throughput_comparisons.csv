@@ -1,0 +1,13 @@
+dataset,is_primary,comparison_type,left_method,right_method,left_budget,right_budget,prompts,mean_tokens_per_second_diff,tokens_per_second_diff_ci_low,tokens_per_second_diff_ci_high,mean_relative_pct_diff,mean_baseline_normalized_speedup_diff,baseline_normalized_speedup_diff_ci_low,baseline_normalized_speedup_diff_ci_high,improve_prompts,tie_prompts,hurt_prompts
+GSM8K,False,controlled,DFlash2-Pairwise-K16-B7,DFlash2-Original-DDTree-B7,7,7,1,34.48482530722109,34.48482530722109,34.48482530722109,32.261271682565464,nan,nan,nan,1,0,0
+GSM8K,False,controlled,DFlash2-Pairwise-K16-B7,Raw-DFlash2,7,,1,25.664164405153045,25.664164405153045,25.664164405153045,22.179155500514803,nan,nan,nan,1,0,0
+GSM8K,False,within_family_vs_sequential,Raw-DFlash,Sequential-Baseline,,,1,126.35463315458279,126.35463315458279,126.35463315458279,252.02914709673826,nan,nan,nan,1,0,0
+GSM8K,False,within_family_vs_sequential,DFlash-Original-DDTree-B16,Sequential-Baseline,16,,1,110.52386878299251,110.52386878299251,110.52386878299251,220.45282937216243,nan,nan,nan,1,0,0
+GSM8K,False,within_family_vs_sequential,DFlash-Original-DDTree-B32,Sequential-Baseline,32,,1,123.48336848596597,123.48336848596597,123.48336848596597,246.30207269151887,nan,nan,nan,1,0,0
+GSM8K,False,within_family_vs_sequential,DFlash-Original-DDTree-B64,Sequential-Baseline,64,,1,150.26394649172045,150.26394649172045,150.26394649172045,299.71907897802856,nan,nan,nan,1,0,0
+GSM8K,False,controlled,DFlash-Original-DDTree-B16,Raw-DFlash,16,,1,-15.830764371590277,-15.830764371590277,-15.830764371590277,-8.969802070366235,nan,nan,nan,0,0,1
+GSM8K,False,controlled,DFlash-Original-DDTree-B32,Raw-DFlash,32,,1,-2.871264668616817,-2.871264668616817,-2.871264668616817,-1.6268750620372834,nan,nan,nan,0,0,1
+GSM8K,False,controlled,DFlash-Original-DDTree-B64,Raw-DFlash,64,,1,23.90931333713766,23.90931333713766,23.90931333713766,13.547154340656054,nan,nan,nan,1,0,0
+GSM8K,False,within_family_vs_sequential,Raw-DFlash2,Sequential-Baseline,,,1,63.60328709177903,63.60328709177903,63.60328709177903,122.05651008851343,nan,nan,nan,1,0,0
+GSM8K,False,within_family_vs_sequential,DFlash2-Original-DDTree-B7,Sequential-Baseline,7,,1,54.78262618971099,54.78262618971099,54.78262618971099,105.12941188953087,nan,nan,nan,1,0,0
+GSM8K,False,within_family_vs_sequential,DFlash2-Pairwise-K16-B7,Sequential-Baseline,7,,1,89.26745149693207,89.26745149693207,89.26745149693207,171.30676876006115,nan,nan,nan,1,0,0

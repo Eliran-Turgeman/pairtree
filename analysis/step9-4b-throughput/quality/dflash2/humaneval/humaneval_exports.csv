@@ -1,0 +1,13 @@
+method_key,method,budget,samples,path
+baseline,target-only,,164,baseline.jsonl
+dflash2,dflash2,,164,dflash2.jsonl
+dflash2_original_ddtree_tb7,dflash2-original-ddtree,7,164,dflash2_original_ddtree_tb7.jsonl
+dflash2_original_ddtree_tb16,dflash2-original-ddtree,16,164,dflash2_original_ddtree_tb16.jsonl
+dflash2_original_ddtree_tb32,dflash2-original-ddtree,32,164,dflash2_original_ddtree_tb32.jsonl
+dflash2_original_ddtree_tb64,dflash2-original-ddtree,64,164,dflash2_original_ddtree_tb64.jsonl
+dflash2_pairwise_k16_tb7,pairwise,7,164,dflash2_pairwise_k16_tb7.jsonl
+dflash2_pairwise_k16_tb16,pairwise,16,164,dflash2_pairwise_k16_tb16.jsonl
+dflash2_pairwise_k16_tb32,pairwise,32,164,dflash2_pairwise_k16_tb32.jsonl
+dflash2_pairwise_k16_tb64,pairwise,64,164,dflash2_pairwise_k16_tb64.jsonl
+dflash2_unary_k16_tb32,unary,32,164,dflash2_unary_k16_tb32.jsonl
+dflash2_unary_k16_tb64,unary,64,164,dflash2_unary_k16_tb64.jsonl

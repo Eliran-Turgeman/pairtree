@@ -1,0 +1,99 @@
+{
+  "allow_partial": true,
+  "artifacts": [
+    {
+      "dataset": "gsm8k",
+      "dataset_label": "GSM8K",
+      "dataset_revision": "740312add88f781978c0658806c59bc2815b9866",
+      "family": "original",
+      "path": "artifacts/step9_4b/1bfb1cb8cf3cb40308d520de608a01fe5a86eafe/matrix/gsm8k_original_controlled.pt",
+      "sample_count": 2,
+      "sha256": "07b9d91a9e2d2736c6f1461d3659482c05bc251be0f7b25c98dd97361b325d2a",
+      "trajectory_mode": "controlled_shared"
+    },
+    {
+      "dataset": "gsm8k",
+      "dataset_label": "GSM8K",
+      "dataset_revision": "740312add88f781978c0658806c59bc2815b9866",
+      "family": "dflash2",
+      "path": "artifacts/step9_4b/1bfb1cb8cf3cb40308d520de608a01fe5a86eafe/matrix/gsm8k_dflash2_controlled.pt",
+      "sample_count": 2,
+      "sha256": "0d704387578a5671594bcac6e4256f8f11ab6d135f17c273c2d1a045f6942049",
+      "trajectory_mode": "controlled_shared"
+    }
+  ],
+  "bootstrap_samples": 10000,
+  "bootstrap_seed": 20260906,
+  "dflash2_draft_revision": "e3e7a18e4f541fa3841c2fb0666a7759079ab6fd",
+  "expected_commit": "1bfb1cb8cf3cb40308d520de608a01fe5a86eafe",
+  "generated_at": "2026-09-06T16:08:02.958573+00:00",
+  "original_draft_revision": "b74e3a329c4d963783143b1e970d95b002be72bd",
+  "target_model": "Qwen/Qwen3-4B",
+  "target_revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "timing_field_source_counts": {
+    "baseline": {
+      "derived": 0,
+      "runner": 4
+    },
+    "ddtree_tb16": {
+      "derived": 0,
+      "runner": 2
+    },
+    "ddtree_tb32": {
+      "derived": 0,
+      "runner": 2
+    },
+    "ddtree_tb64": {
+      "derived": 0,
+      "runner": 2
+    },
+    "dflash": {
+      "derived": 0,
+      "runner": 2
+    },
+    "dflash2": {
+      "derived": 0,
+      "runner": 2
+    },
+    "dflash2_original_ddtree_tb16": {
+      "derived": 0,
+      "runner": 2
+    },
+    "dflash2_original_ddtree_tb32": {
+      "derived": 0,
+      "runner": 2
+    },
+    "dflash2_original_ddtree_tb64": {
+      "derived": 0,
+      "runner": 2
+    },
+    "dflash2_original_ddtree_tb7": {
+      "derived": 0,
+      "runner": 2
+    },
+    "dflash2_pairwise_k16_tb16": {
+      "derived": 0,
+      "runner": 2
+    },
+    "dflash2_pairwise_k16_tb32": {
+      "derived": 0,
+      "runner": 2
+    },
+    "dflash2_pairwise_k16_tb64": {
+      "derived": 0,
+      "runner": 2
+    },
+    "dflash2_pairwise_k16_tb7": {
+      "derived": 0,
+      "runner": 2
+    },
+    "dflash2_unary_k16_tb32": {
+      "derived": 0,
+      "runner": 2
+    },
+    "dflash2_unary_k16_tb64": {
+      "derived": 0,
+      "runner": 2
+    }
+  }
+}

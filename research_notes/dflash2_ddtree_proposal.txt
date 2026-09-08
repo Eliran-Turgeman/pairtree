@@ -1,0 +1,141 @@
+I have the following idea on combining between dflash2 and ddtree, please rate it
+
+My #1 idea: DDTree × DFlash 2
+
+On August 18, the DFlash authors released DFlash 2.
+
+DFlash 2 specifically addresses the fact that the correct token is often somewhere in DFlash's candidate set but isn't top-1. For their Qwen example, the target token is DFlash's top-1 candidate at the first position about 85.4% of the time, but is inside the top-16 99.5% of the time. Their oracle top-16 selector would move acceptance length from 4.27 → 6.79.
+
+Their solution is extremely interesting for DDTree.
+
+Instead of just giving
+
+$$ q_i(b), $$
+
+DFlash 2 has a tiny learned pairwise path selector that scores:
+
+$$ S_i(a,b) $$
+
+meaning roughly:
+
+given candidate token \(a\) immediately before it, how plausible is candidate \(b\)?
+
+It computes the pairwise scores for the top-16 candidates in parallel, with only about 2M extra parameters and reportedly ~0.6% cycle-latency overhead for the selector itself.
+
+But DFlash 2 then uses those scores to select one path.
+
+DDTree does exactly the opposite:
+
+don't gamble on one path; hedge by verifying several paths.
+
+So there is a very natural synthesis:
+
+Pairwise / Markov DDTree
+
+Instead of DDTree's independent surrogate
+
+$$ Q_{\text{DDTree}}(u) = \prod_i q_i(u_i), $$
+
+construct something like
+
+$$ Q_{\text{pair}}(u) = r_1(u_1\mid b) \prod_{i=2}^{d} r_i(u_i\mid u_{i-1}) $$
+
+where the \(r_i\)'s are derived from DFlash 2's pairwise selector.
+
+Conceptually:
+
+DDTree
+
+DFlash marginals → independent path probabilities → tree
+
+DFlash 2
+
+DFlash candidates → pairwise coherence → ONE path
+
+Your method
+
+DFlash 2 candidates → pairwise coherence → TREE
+
+That combination is extremely natural.
+
+And in the literature/searches I ran, I did not find an existing paper that combines DFlash 2's pairwise selector with DDTree-style multi-branch verification. Given that DFlash 2 was only released August 18, that's unsurprising. I would still do a more exhaustive literature check before making a novelty claim.
+
+There's even a neat theorem hiding here
+
+Something I like a lot about this direction is that DDTree's Proposition 1 is actually more general than the particular independent \(Q\) they use.
+
+Their proof essentially uses
+
+$$ \mathbb E[\alpha_T(Y)] = \sum_{u\in T}P(Y_{1:|u|}=u). $$
+
+The argument is about prefix probability mass, not specifically diffusion independence. DDTree needs factorization only because that's the only tractable prefix-probability estimate vanilla DFlash gives them.
+
+If DFlash 2 gives us a tractable first-order conditional surrogate, then we can replace the independent distribution by a Markov-style surrogate.
+
+Moreover, if
+
+$$ r_i(v\mid u)\le1, $$
+
+then
+
+$$ Q_{\text{pair}}(uv) = Q_{\text{pair}}(u)r_i(v\mid u) \le Q_{\text{pair}}(u). $$
+
+So an ancestor still has at least as much probability mass as a descendant.
+
+That means DDTree's elegant:
+
+take the top-\(B\) prefixes with a best-first search
+
+structure should survive.
+
+You potentially get a result along the lines of:
+
+DDTree's optimal tree-construction result extends from independent diffusion marginals to any efficiently computable causal surrogate with monotone prefix probabilities. DFlash 2 provides such a surrogate essentially for free.
+
+That is much more interesting than an engineering tweak.
+
+And there's a beautiful experimental question
+
+I wouldn't start by measuring tokens/sec.
+
+I'd start by measuring how wrong DDTree's surrogate is.
+
+For every actual target verification round, record the real target prefix \(y_{1:d}\). Then ask:
+
+At depth \(d\), what rank did the actual target prefix have according to DDTree?
+
+Do this for:
+
+$$ S_{\text{DDTree}}(u) $$
+
+versus
+
+$$ S_{\text{DFlash2-pairwise}}(u). $$
+
+Then plot something like:
+
+Target-prefix coverage vs tree budget
+
+$$ C(B,d) = P(\text{target prefix of depth }d\text{ appears in }T_B). $$
+
+That's almost directly connected to acceptance:
+
+$$ P(\alpha_T\ge d)=C(B,d). $$
+
+Imagine getting a result like:
+
+Scorer	\(B=32\)	\(B=64\)	\(B=128\)
+DDTree marginal	51%	63%	72%
+DFlash2 pairwise	68%	79%	86%
+
+at, say, depth 6.
+
+Before you've even optimized a kernel, you've demonstrated:
+
+DDTree is spending verification budget on the wrong branches, and DFlash2's pairwise information fixes a meaningful portion of it.
+
+That's a very compelling research result.
+
+And DFlash 2 itself says there's still substantial selection headroom: its learned selector improves acceptance but remains far below its top-16 oracle. The authors explicitly describe pairwise scoring as their simplest selector and say there's plenty left to explore.
+
+This feels unusually well timed.

@@ -1,0 +1,27 @@
+.vscode
+.venv/
+.reader-venv/
+.copilot/
+.DS_Store
+__pycache__
+**/*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Reproducible document build intermediates. Final PDFs are committed.
+research_notes/build_*/
+*.aux
+*.fls
+*.fdb_latexmk
+*.out
+*.toc
+
+# Local model/download caches and editor state.
+.cache/
+.huggingface/
+
+# Raw benchmark evidence is preserved locally but not published in Git.
+/artifacts/
+/runs/
+/traces/
+/logs/

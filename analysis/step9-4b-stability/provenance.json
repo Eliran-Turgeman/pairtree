@@ -1,0 +1,119 @@
+{
+  "allow_partial": true,
+  "artifacts": [
+    {
+      "dataset": "gsm8k",
+      "dataset_label": "GSM8K",
+      "dataset_revision": "740312add88f781978c0658806c59bc2815b9866",
+      "family": "original",
+      "path": "artifacts/step9_4b/1bfb1cb8cf3cb40308d520de608a01fe5a86eafe/stability/gsm8k_original_ab.pt",
+      "sample_count": 16,
+      "sha256": "de935467d6144642898a5ed17d9837bd3f737e62a3a43c24cd132dd052799076",
+      "trajectory_mode": "controlled_shared"
+    },
+    {
+      "dataset": "gsm8k",
+      "dataset_label": "GSM8K",
+      "dataset_revision": "740312add88f781978c0658806c59bc2815b9866",
+      "family": "dflash2",
+      "path": "artifacts/step9_4b/1bfb1cb8cf3cb40308d520de608a01fe5a86eafe/stability/gsm8k_dflash2_ab.pt",
+      "sample_count": 16,
+      "sha256": "4e4059e6306a2aa2d5ec2d3e10bcae4dd34fe1171212153fe251560c3561f1a7",
+      "trajectory_mode": "controlled_shared"
+    },
+    {
+      "dataset": "gsm8k",
+      "dataset_label": "GSM8K",
+      "dataset_revision": "740312add88f781978c0658806c59bc2815b9866",
+      "family": "original",
+      "path": "artifacts/step9_4b/1bfb1cb8cf3cb40308d520de608a01fe5a86eafe/stability/gsm8k_original_ba.pt",
+      "sample_count": 16,
+      "sha256": "67692c9a31d02f7d5f2d9e5f7a7620a378b28c2c27d8434815f510e5185b4ccb",
+      "trajectory_mode": "controlled_shared"
+    },
+    {
+      "dataset": "gsm8k",
+      "dataset_label": "GSM8K",
+      "dataset_revision": "740312add88f781978c0658806c59bc2815b9866",
+      "family": "dflash2",
+      "path": "artifacts/step9_4b/1bfb1cb8cf3cb40308d520de608a01fe5a86eafe/stability/gsm8k_dflash2_ba.pt",
+      "sample_count": 16,
+      "sha256": "a2ff545d346daa546d1ba23ca73e65d5a6aaa494e17e07c221273555c214df25",
+      "trajectory_mode": "controlled_shared"
+    }
+  ],
+  "bootstrap_samples": 10000,
+  "bootstrap_seed": 20260906,
+  "dflash2_draft_revision": "e3e7a18e4f541fa3841c2fb0666a7759079ab6fd",
+  "expected_commit": "1bfb1cb8cf3cb40308d520de608a01fe5a86eafe",
+  "generated_at": "2026-09-06T17:03:49.281150+00:00",
+  "original_draft_revision": "b74e3a329c4d963783143b1e970d95b002be72bd",
+  "target_model": "Qwen/Qwen3-4B",
+  "target_revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "timing_field_source_counts": {
+    "baseline": {
+      "derived": 0,
+      "runner": 32
+    },
+    "ddtree_tb16": {
+      "derived": 0,
+      "runner": 16
+    },
+    "ddtree_tb32": {
+      "derived": 0,
+      "runner": 16
+    },
+    "ddtree_tb64": {
+      "derived": 0,
+      "runner": 16
+    },
+    "dflash": {
+      "derived": 0,
+      "runner": 16
+    },
+    "dflash2": {
+      "derived": 0,
+      "runner": 16
+    },
+    "dflash2_original_ddtree_tb16": {
+      "derived": 0,
+      "runner": 16
+    },
+    "dflash2_original_ddtree_tb32": {
+      "derived": 0,
+      "runner": 16
+    },
+    "dflash2_original_ddtree_tb64": {
+      "derived": 0,
+      "runner": 16
+    },
+    "dflash2_original_ddtree_tb7": {
+      "derived": 0,
+      "runner": 16
+    },
+    "dflash2_pairwise_k16_tb16": {
+      "derived": 0,
+      "runner": 16
+    },
+    "dflash2_pairwise_k16_tb32": {
+      "derived": 0,
+      "runner": 16
+    },
+    "dflash2_pairwise_k16_tb64": {
+      "derived": 0,
+      "runner": 16
+    },
+    "dflash2_pairwise_k16_tb7": {
+      "derived": 0,
+      "runner": 16
+    },
+    "dflash2_unary_k16_tb32": {
+      "derived": 0,
+      "runner": 16
+    },
+    "dflash2_unary_k16_tb64": {
+      "derived": 0,
+      "runner": 16
+    }
+  }
+}

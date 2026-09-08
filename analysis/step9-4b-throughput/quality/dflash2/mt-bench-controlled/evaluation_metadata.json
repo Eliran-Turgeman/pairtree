@@ -1,0 +1,11 @@
+{
+  "dataset_order_sha256": "242aa134cc2e5f1fdb06c66a940eb36319ebe8f4e4c12aa97feb6c0466c2be75",
+  "dataset_revision": "e3a795c5e9a82ee40611c416b8a7786c73198991",
+  "math_verify_version": null,
+  "saved_prompt_hashes_validated": true,
+  "target_model": "Qwen/Qwen3-4B",
+  "target_revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "task": "mt-bench",
+  "tokenizer_revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+  "validated_prompt_method_pairs": 1920
+}
