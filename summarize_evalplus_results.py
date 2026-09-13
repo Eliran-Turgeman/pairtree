@@ -13,6 +13,14 @@ TREE_METHOD_PATTERN = re.compile(
 )
 STEP9_METHOD_PATTERNS = (
     (
+        re.compile(r"^dflash2_original_ddtree_shared_tb(\d+)-sanitized_eval_results$"),
+        "dflash2-original-ddtree-shared-preparation",
+    ),
+    (
+        re.compile(r"^dflash2_unary_k16_shared_tb(\d+)-sanitized_eval_results$"),
+        "unary-shared-preparation",
+    ),
+    (
         re.compile(r"^ddtree_tb(\d+)-sanitized_eval_results$"),
         "dflash-original-ddtree",
     ),

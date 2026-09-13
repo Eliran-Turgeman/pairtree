@@ -1,5 +1,12 @@
 # Step 9: One-H100 Qwen3-4B throughput validation
 
+**Post-report qualification:** these frozen results used shared proposal
+preparation: unary methods also computed unused conditional selector scores.
+They are not throughput results against the new lean-unary path. The
+isolated correction and rerun are specified in
+`research_notes/step9_4b_throughput_protocol.md` under "Unary preparation audit".
+The numbers below remain the original frozen evidence.
+
 ## Question and decision
 
 This experiment asks whether DFlash2 Pairwise-DDTree's improved tree

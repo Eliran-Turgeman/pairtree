@@ -79,9 +79,14 @@ FULL_TIMING_REPETITIONS="${FULL_TIMING_REPETITIONS:-1}"
 
 PROFILE="${1:-}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-artifacts/step9_4b}"
+# Existing profiles reproduce the frozen preparation path.
+DFLASH2_UNARY_PREPARATION="shared"
+if [[ "${PROFILE}" == "unary-smoke" || "${PROFILE}" == "unary-audit" ]]; then
+  DFLASH2_UNARY_PREPARATION="both"
+fi
 
 if [[ -z "${PROFILE}" ]]; then
-  echo "usage: $0 {one|matrix|domains|stability|full}" >&2
+  echo "usage: $0 {one|matrix|domains|stability|full|unary-smoke|unary-audit}" >&2
   exit 2
 fi
 
@@ -141,6 +146,10 @@ run_original_family() {
   if [[ "${suffix}" == "native" ]]; then
     native_args+=(--native-method-trajectories)
   fi
+  if [[ -e "${OUTPUT_DIR}/${dataset}_original_${suffix}.pt" ]]; then
+    echo "refusing to overwrite completed original artifact for ${dataset}/${suffix}" >&2
+    exit 1
+  fi
 
   python benchmark.py \
     --model-name-or-path "${TARGET}" \
@@ -171,6 +180,10 @@ run_dflash2_family() {
   if [[ "${suffix}" == "native" ]]; then
     native_args+=(--native-method-trajectories)
   fi
+  if [[ -e "${OUTPUT_DIR}/${dataset}_dflash2_${suffix}.pt" ]]; then
+    echo "refusing to overwrite completed DFlash2 artifact for ${dataset}/${suffix}" >&2
+    exit 1
+  fi
 
   python benchmark.py \
     --model-name-or-path "${TARGET}" \
@@ -178,6 +191,7 @@ run_dflash2_family() {
     --draft-name-or-path "${DFLASH2_DRAFTER}" \
     --draft-revision "${DFLASH2_DRAFTER_REVISION}" \
     --draft-type dflash2 \
+    --dflash2-unary-preparation "${DFLASH2_UNARY_PREPARATION}" \
     --dataset "${dataset}" \
     --dataset-revision "${revision}" \
     --max-samples "${samples}" \
@@ -220,6 +234,20 @@ run_paired_dataset() {
 }
 
 case "${PROFILE}" in
+  unary-smoke)
+    TIMING_REPETITIONS=1
+    run_paired_dataset gsm8k 2 32 \
+      "dflash2_original_ddtree:16,64;dflash2_pairwise_k16:16,64"
+    ;;
+  unary-audit)
+    TIMING_REPETITIONS=3
+    for dataset in gsm8k humaneval; do
+      run_paired_dataset "${dataset}" 32 256 \
+        "dflash2_original_ddtree:16,64;dflash2_pairwise_k16:16,64" ab original-first
+      run_paired_dataset "${dataset}" 32 256 \
+        "dflash2_original_ddtree:16,64;dflash2_pairwise_k16:16,64" ba dflash2-first
+    done
+    ;;
   one)
     TIMING_REPETITIONS=1
     # One-prompt model-family smoke: confirm both drafter families load and
@@ -298,3 +326,25 @@ case "${PROFILE}" in
     exit 2
     ;;
 esac
+
+if [[ "${PROFILE}" == "unary-smoke" || "${PROFILE}" == "unary-audit" ]]; then
+  analysis_pairs=()
+  if [[ "${PROFILE}" == "unary-smoke" ]]; then
+    analysis_pairs+=(--pair "GSM8K:${OUTPUT_DIR}/gsm8k_original_controlled.pt:${OUTPUT_DIR}/gsm8k_dflash2_controlled.pt")
+  else
+    for dataset in gsm8k humaneval; do
+      for suffix in ab ba; do
+        analysis_pairs+=(--pair "${dataset}:${OUTPUT_DIR}/${dataset}_original_${suffix}.pt:${OUTPUT_DIR}/${dataset}_dflash2_${suffix}.pt")
+      done
+    done
+  fi
+  python analyze_step9_4b_throughput.py \
+    --expected-commit "${COMMIT}" \
+    --target-revision "${TARGET_REVISION}" \
+    --original-draft-revision "${ORIGINAL_DRAFTER_REVISION}" \
+    --dflash2-draft-revision "${DFLASH2_DRAFTER_REVISION}" \
+    --allow-partial \
+    --bootstrap-samples 10000 \
+    --output-dir "${OUTPUT_DIR}/analysis" \
+    "${analysis_pairs[@]}"
+fi

@@ -25,6 +25,11 @@ from summarize_evalplus_results import method_identity as evalplus_identity
         ),
         ("dflash2_unary_k16_tb64", ("unary", 64)),
         ("dflash2_pairwise_k16_tb7", ("pairwise", 7)),
+        (
+            "dflash2_original_ddtree_shared_tb16",
+            ("dflash2-original-ddtree-shared-preparation", 16),
+        ),
+        ("dflash2_unary_k16_shared_tb64", ("unary-shared-preparation", 64)),
     ],
 )
 def test_step9_quality_method_identity(method_key, expected) -> None:
@@ -52,6 +57,14 @@ def test_step9_quality_method_identity(method_key, expected) -> None:
         (
             "dflash2_pairwise_k16_tb7-sanitized_eval_results",
             ("pairwise", 7),
+        ),
+        (
+            "dflash2_original_ddtree_shared_tb16-sanitized_eval_results",
+            ("dflash2-original-ddtree-shared-preparation", 16),
+        ),
+        (
+            "dflash2_unary_k16_shared_tb64-sanitized_eval_results",
+            ("unary-shared-preparation", 64),
         ),
     ],
 )

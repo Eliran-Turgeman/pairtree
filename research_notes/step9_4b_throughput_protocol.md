@@ -1,5 +1,82 @@
 # Step 9.4b: dual-drafter, one-H100 throughput protocol
 
+## Unary preparation audit (post-report correction)
+
+The frozen report used **shared preparation**: every DFlash2 tree method ran
+the selector's conditional greedy path and materialized the pairwise score
+lattice, including unary methods which did not use those scores. Thus it
+isolated allocation after common proposal preparation, but did not compare
+against an efficient unary implementation.
+
+Direct `benchmark.py` invocations now default to
+`--dflash2-unary-preparation lean`. Lean unary computes the same LM-head
+logits, top-16 candidates and full-vocabulary log-normalizer without invoking
+the conditional selector. Wider unary support still comes from the same
+full logits. No checkpoint weights, dynamic convolutions, allocation scores,
+tree builder, target verification, or timing boundaries change.
+
+`shared` retains the frozen code path. `both` measures lean unary, shared
+unary controls (keys such as `dflash2_original_ddtree_shared_tb16`), and
+Pairwise within one process with the existing shuffled method order.
+Pairwise always uses conditional preparation. Every artifact records the
+mode, and every tree result records its actual preparation. Analyses label
+preparation in method/comparison CSVs and provenance, and reject merging
+different preparation modes under one dataset label. Artifacts predating
+this field are explicitly interpreted as the historical shared mode.
+
+Existing `one`, `matrix`, `domains`, `stability`, and `full` launcher profiles
+remain on **shared** preparation to reproduce the frozen protocol below.
+Do not use those profiles to claim a lean-unary comparison.
+
+The new GPU sequence, from a clean committed checkout on one H100 80GB:
+
+```bash
+bash run_step9_4b_throughput.sh unary-smoke
+bash run_step9_4b_throughput.sh unary-audit
+```
+
+`unary-smoke` runs two GSM8K prompts, 32 output tokens, B=16/64, one timing
+repetition, both drafter families, and all lean/shared/Pairwise controls.
+Only proceed after it completes successfully; its timing is not evidence of
+a speedup.
+
+`unary-audit` runs 32 GSM8K and 32 HumanEval prompts, the same pinned
+revisions and BF16/SDPA target as Step 9, 256 output tokens, B=16/64, and
+three repetitions. Each dataset runs twice with opposite family launch
+order (`ab` and `ba`). Original DFlash and original DDTree B16/32/64 remain
+practical reference methods. These are development/diagnostic subsets of
+previously used data, not a new confirmatory holdout.
+
+The benchmark checks identical input hashes, output token IDs, matched
+draft tokens per round and committed tokens per round between lean and
+shared unary for every repetition. A discrepancy is a hard failure requiring
+investigation before interpreting speed. This checks the preparation
+correction, **not** equivalence to sequential BF16 target decoding.
+
+Both profiles automatically run the existing analyzer with `--allow-partial`
+(because their sample counts and matrices intentionally differ from the
+full frozen protocol) and 10,000 paired prompt bootstrap resamples. AB/BA
+measurements are combined within prompt, not counted as independent prompts.
+Inspect the individual AB/BA runs for launch variability as well.
+
+Primary diagnostic endpoint: Pairwise-B16 versus **lean** unary-B16.
+Secondary endpoints: the same comparison at B64; lean versus shared unary
+at both budgets (`preparation_ablation`); Pairwise versus shared unary
+(`shared_preparation_control`); and the existing cross-drafter comparisons.
+The primary remains the mean paired prompt-level difference in end-to-end
+tokens/s, with the relative statistic reported separately as before.
+
+Outputs go to separate
+`artifacts/step9_4b/<commit>/{unary-smoke,unary-audit}/` directories, with
+analysis underneath each profile. Completed benchmark artifacts are never
+overwritten by the launcher. The frozen report and old analysis are not
+regenerated or relabeled as lean-unary evidence.
+
+This audit deliberately preserves synchronized stage timing and all other
+generation bookkeeping. It measures the isolated effect of removing unused
+selector work; removing profiling barriers or optimizing other stages is a
+separate experiment. No lean-unary GPU throughput result is claimed yet.
+
 ## Research question
 
 Is DFlash2+Pairwise-K16 faster in tokens/s than each of:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -28,6 +29,7 @@ from analyze_step9_4b_throughput import (
     run_analysis,
     validate_artifact,
     validate_cross_family,
+    validate_unary_preparation,
 )
 
 COMMIT = "a" * 40
@@ -1423,9 +1425,32 @@ def test_compare_methods_returns_none_without_shared_prompts() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_run_analysis_end_to_end_writes_expected_outputs(tmp_path: Path) -> None:
+def set_preparation_mode(run: dict, mode: str) -> None:
+    run["args"]["dflash2_unary_preparation"] = mode
+    run["dflash2_unary_preparation"] = mode
+    for response in run["responses"]:
+        for key, result in list(response.items()):
+            if not key.startswith("dflash2_"):
+                continue
+            is_pairwise = "pairwise" in key
+            for repetition in result.repetitions:
+                repetition.proposal_preparation = (
+                    "conditional" if is_pairwise
+                    else ("shared" if mode == "shared" else "lean")
+                )
+            if mode == "both" and not is_pairwise:
+                shared = copy.deepcopy(result)
+                for repetition in shared.repetitions:
+                    repetition.proposal_preparation = "shared"
+                response[key.replace("_tb", "_shared_tb")] = shared
+
+
+@pytest.mark.parametrize("audit", [False, True])
+def test_run_analysis_end_to_end_writes_expected_outputs(tmp_path: Path, audit) -> None:
     original = build_original_artifact(indices=(0, 1))
     dflash2 = build_dflash2_artifact(indices=(0, 1))
+    if audit:
+        set_preparation_mode(dflash2, "both")
 
     original_path = tmp_path / "gsm8k_original_controlled.pt"
     dflash2_path = tmp_path / "gsm8k_dflash2_controlled.pt"
@@ -1467,21 +1492,35 @@ def test_run_analysis_end_to_end_writes_expected_outputs(tmp_path: Path) -> None
     assert primary_rows[0]["comparison_type"] == "controlled"
 
     comparison_types = {row["comparison_type"] for row in comparison_rows}
-    assert comparison_types == {
+    expected_types = {
         "controlled",
         "cross_drafter",
         "within_family_vs_sequential",
     }
+    if audit:
+        expected_types.update({"preparation_ablation", "shared_preparation_control"})
+    assert comparison_types == expected_types
+    assert primary_rows[0]["right_proposal_preparation"] == ("lean" if audit else "shared")
+    with (output_dir / "method_metrics.csv").open(encoding="utf-8") as handle:
+        method_rows = list(csv.DictReader(handle))
+    if audit:
+        shared_rows = [row for row in method_rows if "_shared_tb" in row["method_key"]]
+        assert shared_rows
+        assert all(row["proposal_preparation"] == "shared" for row in shared_rows)
 
     provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
     assert provenance["expected_commit"] == COMMIT
     assert len(provenance["artifacts"]) == 2
     for artifact in provenance["artifacts"]:
         assert len(artifact["sha256"]) == 64
+        if artifact["family"] == "dflash2":
+            assert artifact["unary_preparation"] == ("both" if audit else "shared")
 
 
+@pytest.mark.parametrize("mixed_modes", [False, True])
 def test_run_analysis_merges_repeated_pairs_for_same_dataset_label(
     tmp_path: Path,
+    mixed_modes,
 ) -> None:
     # Two "repetition" artifact pairs for the same dataset label/indices;
     # the analyzer must aggregate them within-prompt rather than doubling
@@ -1490,6 +1529,8 @@ def test_run_analysis_merges_repeated_pairs_for_same_dataset_label(
     dflash2_a = build_dflash2_artifact(indices=(0,))
     original_b = build_original_artifact(indices=(0,))
     dflash2_b = build_dflash2_artifact(indices=(0,))
+    if mixed_modes:
+        set_preparation_mode(dflash2_b, "lean")
 
     paths = []
     for label, artifact in (
@@ -1517,6 +1558,10 @@ def test_run_analysis_merges_repeated_pairs_for_same_dataset_label(
         allow_partial=True,
     )
 
+    if mixed_modes:
+        with pytest.raises(ValueError, match="cannot merge different unary preparation"):
+            run_analysis(args)
+        return
     run_analysis(args)
 
     import csv
@@ -1530,3 +1575,30 @@ def test_run_analysis_merges_repeated_pairs_for_same_dataset_label(
     # Still exactly one prompt cluster (idx=0), even though two artifact
     # pairs were supplied for the same dataset label.
     assert primary_rows[0]["prompts"] == "1"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["metadata", "preparation", "missing_control", "missing_lean", "output", "acceptance", "prompt"],
+)
+def test_analysis_rejects_invalid_unary_audit(mutation) -> None:
+    run = build_dflash2_artifact(indices=(0,))
+    set_preparation_mode(run, "both")
+    response = run["responses"][0]
+    shared_key = "dflash2_original_ddtree_shared_tb16"
+    if mutation == "metadata":
+        run["dflash2_unary_preparation"] = "shared"
+    elif mutation == "preparation":
+        response[shared_key].proposal_preparation = "lean"
+    elif mutation == "missing_control":
+        del response[shared_key]
+    elif mutation == "missing_lean":
+        del response["dflash2_original_ddtree_tb16"]
+    elif mutation == "output":
+        response[shared_key].output_ids[0, -1] += 1
+    elif mutation == "acceptance":
+        response[shared_key].matched_draft_tokens_per_round = [0.0, 0.0]
+    else:
+        response[shared_key].prompt_hash = "different"
+    with pytest.raises(ValueError):
+        validate_unary_preparation(run, Path("audit.pt"))

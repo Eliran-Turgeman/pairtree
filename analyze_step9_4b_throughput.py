@@ -196,6 +196,10 @@ END_TO_END_TIMING_FIELDS = ("total_generation_time", "tokens_per_second")
 
 
 def method_label(key: str) -> str:
+    if "_shared_tb" in key:
+        return method_label(key.replace("_shared_tb", "_tb")).replace(
+            "-B", "-SharedPreparation-B"
+        )
     if key == "baseline":
         return "Sequential-Baseline"
     if key == "dflash":
@@ -211,9 +215,9 @@ def method_label(key: str) -> str:
     match = re.match(r"^dflash2_pairwise_k16_tb(\d+)$", key)
     if match:
         return f"DFlash2-Pairwise-K16-B{match.group(1)}"
-    match = re.match(r"^dflash2_unary_k16_tb(\d+)$", key)
+    match = re.match(r"^dflash2_unary_k(16|32|64)_tb(\d+)$", key)
     if match:
-        return f"DFlash2-Unary-K16-B{match.group(1)}"
+        return f"DFlash2-Unary-K{match.group(1)}-B{match.group(2)}"
     raise ValueError(f"unknown method key: {key}")
 
 
@@ -225,6 +229,71 @@ def method_budget(key: str) -> int | None:
     if key in ("baseline", "dflash", "dflash2"):
         return None
     return int(key.rsplit("_tb", maxsplit=1)[1])
+
+
+def unary_preparation_mode(run: dict[str, Any]) -> str:
+    # Frozen artifacts predate this flag and always used shared preparation.
+    mode = run["args"].get("dflash2_unary_preparation", "shared")
+    if mode not in ("lean", "shared", "both"):
+        raise ValueError(f"invalid unary preparation mode: {mode!r}")
+    if run.get("dflash2_unary_preparation", mode) != mode:
+        raise ValueError("unary preparation metadata disagrees with benchmark arguments")
+    return mode
+
+
+def preparation_for_method(key: str, mode: str) -> str:
+    if key.startswith("dflash2_pairwise_"):
+        return "conditional"
+    if key.startswith(("dflash2_original_ddtree", "dflash2_unary_")):
+        return "shared" if "_shared_tb" in key or mode == "shared" else "lean"
+    return "not_applicable"
+
+
+def dflash2_analysis_methods(run: dict[str, Any]) -> tuple[str, ...]:
+    present = {
+        key for response in run["responses"] for key in response
+        if key.startswith("dflash2_")
+    }
+    for key in present:
+        method_label(key)
+    return (*DFLASH2_METHODS, *sorted(present - set(DFLASH2_METHODS)))
+
+
+def validate_unary_preparation(run: dict[str, Any], path: Path) -> None:
+    mode = unary_preparation_mode(run)
+    if "dflash2_unary_preparation" not in run["args"]:
+        return
+    for response in run["responses"]:
+        for key, result in response.items():
+            if not key.startswith("dflash2_"):
+                continue
+            expected = preparation_for_method(key, mode)
+            if "_shared_tb" in key:
+                if mode != "both":
+                    raise ValueError(f"{path}: shared control {key} requires mode both")
+                lean_key = key.replace("_shared_tb", "_tb")
+                if lean_key not in response:
+                    raise ValueError(f"{path}: missing lean unary counterpart {lean_key}")
+            for repetition in result.repetitions:
+                if getattr(repetition, "proposal_preparation", None) != expected:
+                    raise ValueError(f"{path}: {key} has incorrect proposal preparation")
+            if mode == "both" and expected == "lean":
+                shared_key = key.replace("_tb", "_shared_tb")
+                if shared_key not in response:
+                    raise ValueError(f"{path}: missing shared unary control {shared_key}")
+                shared_repetitions = response[shared_key].repetitions
+                if len(result.repetitions) != len(shared_repetitions):
+                    raise ValueError(f"{path}: unequal lean/shared repetitions for {key}")
+                for lean, shared in zip(result.repetitions, shared_repetitions):
+                    if (
+                        lean.prompt_hash != shared.prompt_hash
+                        or not torch.equal(lean.output_ids, shared.output_ids)
+                        or lean.matched_draft_tokens_per_round
+                        != shared.matched_draft_tokens_per_round
+                        or lean.committed_tokens_per_round
+                        != shared.committed_tokens_per_round
+                    ):
+                        raise ValueError(f"{path}: lean/shared unary behavior differs for {key}")
 
 
 # ---------------------------------------------------------------------------
@@ -372,6 +441,10 @@ def validate_artifact(
     required_methods = set(
         ORIGINAL_METHODS if family == FAMILY_ORIGINAL else DFLASH2_METHODS
     )
+    if family == FAMILY_DFLASH2:
+        required_methods.update(
+            key for key in dflash2_analysis_methods(run) if "_shared_tb" in key
+        )
     for position, response in enumerate(run["responses"]):
         missing_methods = required_methods - response.keys()
         if missing_methods and not allow_partial:
@@ -383,6 +456,8 @@ def validate_artifact(
     validate_repetitions(
         run, path, methods=required_methods, allow_partial=allow_partial
     )
+    if family == FAMILY_DFLASH2:
+        validate_unary_preparation(run, path)
 
 
 def validate_repetitions(
@@ -1133,6 +1208,24 @@ def comparison_pairs() -> list[tuple[str, str, bool, str]]:
                 "cross_drafter",
             )
         )
+    for budget in DFLASH2_BUDGETS:
+        for unary in ("dflash2_original_ddtree", "dflash2_unary_k16"):
+            pairs.extend(
+                [
+                    (
+                        f"{unary}_tb{budget}",
+                        f"{unary}_shared_tb{budget}",
+                        False,
+                        "preparation_ablation",
+                    ),
+                    (
+                        f"dflash2_pairwise_k16_tb{budget}",
+                        f"{unary}_shared_tb{budget}",
+                        False,
+                        "shared_preparation_control",
+                    ),
+                ]
+            )
     return pairs
 
 
@@ -1657,6 +1750,8 @@ def run_analysis(args: argparse.Namespace) -> None:
         dflash2_clustered_parts = []
         original_stage_parts = []
         dflash2_stage_parts = []
+        preparation_modes = set()
+        method_matrices = set()
         for original_path, dflash2_path in artifact_pairs:
             original_run = load_artifact(original_path)
             dflash2_run = load_artifact(dflash2_path)
@@ -1684,6 +1779,13 @@ def run_analysis(args: argparse.Namespace) -> None:
                 dataset_label=label,
                 allow_partial=args.allow_partial,
             )
+            preparation_modes.add(unary_preparation_mode(dflash2_run))
+            dflash2_methods = dflash2_analysis_methods(dflash2_run)
+            method_matrices.add(dflash2_methods)
+            if len(preparation_modes) != 1 or len(method_matrices) != 1:
+                raise ValueError(
+                    f"{label}: cannot merge different unary preparation modes/method matrices"
+                )
 
             original_metrics = collect_response_metrics(
                 original_run,
@@ -1694,7 +1796,7 @@ def run_analysis(args: argparse.Namespace) -> None:
             dflash2_metrics = collect_response_metrics(
                 dflash2_run,
                 path=dflash2_path,
-                methods=DFLASH2_METHODS,
+                methods=dflash2_methods,
                 allow_partial=args.allow_partial,
             )
             original_clustered_parts.append(original_metrics)
@@ -1708,7 +1810,7 @@ def run_analysis(args: argparse.Namespace) -> None:
                 )
             )
             dflash2_stage_parts.append(
-                collect_stage_times(dflash2_run, dflash2_cluster_ids, DFLASH2_METHODS)
+                collect_stage_times(dflash2_run, dflash2_cluster_ids, dflash2_methods)
             )
 
             for family, path, run in (
@@ -1725,6 +1827,10 @@ def run_analysis(args: argparse.Namespace) -> None:
                         "dataset_revision": run["args"]["dataset_revision"],
                         "trajectory_mode": run["trajectory_mode"],
                         "sample_count": len(run["completed_dataset_indices"]),
+                        "unary_preparation": (
+                            unary_preparation_mode(run)
+                            if family == FAMILY_DFLASH2 else "not_applicable"
+                        ),
                     }
                 )
 
@@ -1767,7 +1873,7 @@ def run_analysis(args: argparse.Namespace) -> None:
                 FAMILY_DFLASH2,
                 dflash2_run,
                 dflash2_clustered,
-                DFLASH2_METHODS,
+                dflash2_methods,
             )
         )
         correctness_rows.extend(
@@ -1777,7 +1883,7 @@ def run_analysis(args: argparse.Namespace) -> None:
         )
         correctness_rows.extend(
             build_correctness_rows(
-                label, FAMILY_DFLASH2, dflash2_clustered, DFLASH2_METHODS
+                label, FAMILY_DFLASH2, dflash2_clustered, dflash2_methods
             )
         )
         comparison_rows.extend(
@@ -1803,7 +1909,7 @@ def run_analysis(args: argparse.Namespace) -> None:
             build_family_reference_rows(
                 label,
                 dflash2_clustered,
-                DFLASH2_METHODS,
+                dflash2_methods,
                 samples=args.bootstrap_samples,
                 seed_offset=dataset_offset * 1000 + 600,
             )
@@ -1817,6 +1923,20 @@ def run_analysis(args: argparse.Namespace) -> None:
                 label, combined_clustered, combined_stage_times
             )
         )
+        mode = unary_preparation_mode(dflash2_run)
+        preparations = {
+            method_label(key): preparation_for_method(key, mode)
+            for key in (*ORIGINAL_METHODS, *dflash2_methods)
+        }
+        for rows in (method_metrics_rows, correctness_rows):
+            for row in rows:
+                if row["dataset"] == label:
+                    row["proposal_preparation"] = preparations[row["method"]]
+        for rows in (comparison_rows, timing_rows):
+            for row in rows:
+                if row["dataset"] == label:
+                    row["left_proposal_preparation"] = preparations[row["left_method"]]
+                    row["right_proposal_preparation"] = preparations[row["right_method"]]
 
     output_dir = args.output_dir
     write_csv(output_dir / "method_metrics.csv", method_metrics_rows)

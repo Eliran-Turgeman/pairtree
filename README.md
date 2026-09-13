@@ -110,6 +110,39 @@ python3 summarize_run.py runs/<experiment-name>/<run-name>.pt
 The CSV is written next to the `.pt` file by default. Use `--csv <path>` to
 choose a different output location.
 
+## Unary preparation correction
+
+New direct `benchmark.py` invocations default to
+`--dflash2-unary-preparation lean`: unary trees skip the conditional selector
+and pairwise lattice they do not use. The checkpoint, unary scores, candidate
+support, allocation rule, and verifier are unchanged. Pairwise still computes
+its conditional scores. `shared` reproduces the old preparation path; `both`
+adds explicitly named `_shared_tb*` unary controls to the same timed process.
+
+The frozen Step-9 report measured shared preparation, so its 5.3%-9.6%
+throughput gain is not yet a result against lean unary. Its existing results
+and artifacts have not been replaced. The Step-8 and existing Step-9 launcher
+profiles explicitly retain shared preparation for reproduction.
+
+The focused correction run needs one H100 80GB with the original CUDA
+environment and a clean, committed checkout:
+
+```bash
+bash run_step9_4b_throughput.sh unary-smoke
+bash run_step9_4b_throughput.sh unary-audit
+```
+
+Run the smoke first. It checks both families and the lean/shared controls on
+two prompts. The audit uses 32 GSM8K and 32 HumanEval prompts, B=16/64,
+256 output tokens, three timing repetitions, and two independent launches
+with opposite family order. Both commands generate paired-bootstrap analysis
+under their own `artifacts/step9_4b/<commit>/<profile>/analysis/` directory.
+Lean/shared output or per-round acceptance disagreement aborts the audit.
+Timing instrumentation is deliberately unchanged to isolate the preparation
+correction; this is not an uninstrumented serving benchmark.
+
+See `research_notes/step9_4b_throughput_protocol.md` for the audit endpoints.
+
 ## DFlash2 Proof of Concept
 
 Verify that the experimental

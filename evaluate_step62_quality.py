@@ -15,6 +15,14 @@ from transformers import AutoTokenizer
 
 TREE_METHOD_PATTERN = re.compile(r"^dflash2_(unary|pairwise)_k16_tb(\d+)$")
 STEP9_METHOD_PATTERNS = (
+    (
+        re.compile(r"^dflash2_original_ddtree_shared_tb(\d+)$"),
+        "dflash2-original-ddtree-shared-preparation",
+    ),
+    (
+        re.compile(r"^dflash2_unary_k16_shared_tb(\d+)$"),
+        "unary-shared-preparation",
+    ),
     (re.compile(r"^ddtree_tb(\d+)$"), "dflash-original-ddtree"),
     (
         re.compile(r"^dflash2_original_ddtree_tb(\d+)$"),

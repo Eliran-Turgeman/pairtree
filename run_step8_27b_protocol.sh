@@ -44,6 +44,7 @@ run_dataset() {
     --draft-name-or-path "${DRAFTER}" \
     --draft-revision "${DRAFTER_REVISION}" \
     --draft-type dflash2 \
+    --dflash2-unary-preparation shared \
     --dataset "${dataset}" \
     --max-samples "${samples}" \
     --max-new-tokens "${max_new_tokens}" \

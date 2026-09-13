@@ -12,7 +12,7 @@ from ddtree import (
 from dflash import cuda_time, empty_stage_times, end_to_end_timing_fields
 from generation_cache import create_generation_cache, retain_cache_prefix
 from model import DFlash2DraftModel, extract_context_feature
-from model.dflash2 import DFlash2Proposal
+from model.dflash2 import DFlash2Proposal, DFlash2UnaryProposal
 from offline_dflash2_trees import (
     PAIRWISE_MASS_PRESERVING,
     UNARY_FULL_MASS,
@@ -52,20 +52,28 @@ EXPECTED_CANDIDATE_COUNT = 16
 
 
 def proposal_to_lattice(
-    proposal: DFlash2Proposal,
+    proposal: DFlash2Proposal | DFlash2UnaryProposal,
     candidate_count: int = EXPECTED_CANDIDATE_COUNT,
+    *,
+    require_pairwise: bool = True,
 ) -> dict[str, torch.Tensor]:
     required = {
         "unary_logsumexp": proposal.unary_logsumexp,
-        "anchor_final_scores": proposal.anchor_final_scores,
-        "pairwise_final_scores": proposal.pairwise_final_scores,
     }
+    if require_pairwise:
+        if not isinstance(proposal, DFlash2Proposal):
+            raise ValueError("pairwise lattice requires a conditional DFlash2 proposal")
+        required.update(
+            anchor_final_scores=proposal.anchor_final_scores,
+            pairwise_final_scores=proposal.pairwise_final_scores,
+        )
     missing = [name for name, value in required.items() if value is None]
     if missing:
         raise ValueError(
             "DFlash2 proposal did not materialize the candidate lattice: "
             + ", ".join(missing)
         )
+    assert proposal.unary_logsumexp is not None
     if proposal.candidate_ids.shape[0] != 1:
         raise ValueError("online DFlash2 tree generation requires batch size 1")
 
@@ -91,10 +99,16 @@ def proposal_to_lattice(
         "candidate_token_ids": candidate_ids[0],
         "candidate_unary_logits": unary_scores[0],
         "unary_logsumexp": proposal.unary_logsumexp[0],
-        "anchor_final_scores": proposal.anchor_final_scores[0],
-        "pairwise_final_scores": proposal.pairwise_final_scores[0],
     }
-    if candidate_count == EXPECTED_CANDIDATE_COUNT:
+    if require_pairwise:
+        assert isinstance(proposal, DFlash2Proposal)
+        assert proposal.anchor_final_scores is not None
+        assert proposal.pairwise_final_scores is not None
+        lattice.update(
+            anchor_final_scores=proposal.anchor_final_scores[0],
+            pairwise_final_scores=proposal.pairwise_final_scores[0],
+        )
+    if require_pairwise and candidate_count == EXPECTED_CANDIDATE_COUNT:
         validate_lattice_tensors(
             lattice,
             expected_depth=EXPECTED_DRAFT_DEPTH,
@@ -110,7 +124,7 @@ def proposal_to_lattice(
 
 
 def candidate_count_for_method(
-    proposal: DFlash2Proposal,
+    proposal: DFlash2Proposal | DFlash2UnaryProposal,
     method: str,
     budget: int,
 ) -> int:
@@ -322,9 +336,16 @@ def dflash2_tree_generate(
     *,
     prompt_id: str | None = None,
     collect_tree_data: bool = False,
+    unary_preparation: str = "lean",
 ) -> SimpleNamespace:
     if tree_method not in DFLASH2_TREE_METHODS:
         raise ValueError(f"unsupported DFlash2 tree method {tree_method!r}")
+    if unary_preparation not in ("lean", "shared"):
+        raise ValueError("unary_preparation must be 'lean' or 'shared'")
+    lean_unary = tree_method != DFLASH2_PAIRWISE_K16 and unary_preparation == "lean"
+    preparation = (
+        unary_preparation if tree_method != DFLASH2_PAIRWISE_K16 else "conditional"
+    )
     if model.block_size != EXPECTED_DRAFT_DEPTH + 1:
         raise ValueError(
             "online DFlash2 tree prototype expects block size "
@@ -448,11 +469,14 @@ def dflash2_tree_generate(
             use_cache=True,
         )[:, 1 - model.block_size :, :]
         retain_cache_prefix(past_key_values_draft, start)
-        proposal = model.propose(
-            draft_hidden,
-            root_token[:, 0],
-            collect_lattice=True,
-        )
+        if lean_unary:
+            proposal = model.propose_unary(draft_hidden)
+        else:
+            proposal = model.propose(
+                draft_hidden,
+                root_token[:, 0],
+                collect_lattice=True,
+            )
         draft_latency = cuda_time() - draft_start
         if draft_prefill:
             draft_prefill = False
@@ -466,7 +490,9 @@ def dflash2_tree_generate(
             tree_method,
             tree_budget,
         )
-        lattice = proposal_to_lattice(proposal, candidate_count)
+        lattice = proposal_to_lattice(
+            proposal, candidate_count, require_pairwise=not lean_unary
+        )
         candidate_select_latency = cuda_time() - candidate_select_start
         stage_times["candidate_select"] += candidate_select_latency
         tree_build_start = cuda_time()
@@ -624,6 +650,7 @@ def dflash2_tree_generate(
         total_round_latency = cuda_time() - round_start
         metric = {
             "method": tree_method,
+            "proposal_preparation": preparation,
             "prompt_id": prompt_id,
             "round_id": len(round_metrics),
             "tree_budget": tree_budget,
@@ -705,6 +732,7 @@ def dflash2_tree_generate(
         output_ids[0, num_input_tokens:],
     )
     return SimpleNamespace(
+        proposal_preparation=preparation,
         output_ids=output_ids.cpu(),
         num_input_tokens=num_input_tokens,
         num_output_tokens=num_output_tokens,

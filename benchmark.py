@@ -22,6 +22,7 @@ from model import (
 from dflash import dflash_generate
 from dflash2 import dflash2_generate
 from dflash2_tree import (
+    DFLASH2_PAIRWISE_K16,
     DFLASH2_TREE_METHODS,
     dflash2_tree_generate,
 )
@@ -78,6 +79,51 @@ def rotate_method_order(
     ordered = list(method_keys)
     random.Random(seed).shuffle(ordered)
     return ordered
+
+
+def dflash2_execution_configs(
+    tree_configs: list[tuple[str, int]],
+    unary_preparation: str,
+) -> dict[str, tuple[str, int, str]]:
+    if unary_preparation not in ("lean", "shared", "both"):
+        raise ValueError("DFlash2 unary preparation must be lean, shared, or both")
+    configs = {}
+    for method, budget in tree_configs:
+        if method not in DFLASH2_TREE_METHODS or budget <= 0:
+            raise ValueError(f"invalid DFlash2 tree config: {method}:{budget}")
+        key = f"{method}_tb{budget}"
+        if key in configs:
+            raise ValueError(f"duplicate DFlash2 tree config: {method}:{budget}")
+        preparation = "shared" if unary_preparation == "shared" else "lean"
+        configs[key] = (method, budget, preparation)
+        if unary_preparation == "both" and method != DFLASH2_PAIRWISE_K16:
+            configs[f"{method}_shared_tb{budget}"] = (method, budget, "shared")
+    return configs
+
+
+def compare_unary_preparations(response: dict[str, object]) -> None:
+    for shared_key, shared_result in response.items():
+        if "_shared_tb" not in shared_key:
+            continue
+        lean_key = shared_key.replace("_shared_tb", "_tb")
+        lean_results = response[lean_key].repetitions
+        shared_results = shared_result.repetitions
+        if len(lean_results) != len(shared_results):
+            raise ValueError(f"{lean_key} and {shared_key} have different repetitions")
+        for lean, shared in zip(lean_results, shared_results):
+            if lean.prompt_hash != shared.prompt_hash:
+                raise ValueError(f"{lean_key} and {shared_key} have different prompts")
+            lean.matches_shared_unary = torch.equal(lean.output_ids, shared.output_ids)
+            lean.acceptance_matches_shared_unary = (
+                lean.matched_draft_tokens_per_round
+                == shared.matched_draft_tokens_per_round
+                and lean.committed_tokens_per_round == shared.committed_tokens_per_round
+            )
+            if not lean.matches_shared_unary or not lean.acceptance_matches_shared_unary:
+                raise RuntimeError(
+                    f"{lean_key} differs from {shared_key}; stop the unary audit "
+                    "and investigate output/acceptance before interpreting timing"
+                )
 
 
 def attach_repetition_bookkeeping(
@@ -146,6 +192,7 @@ def run_method(
     method_key_to_tree_method: dict[str, str],
     collect_allocation_data: bool,
     prompt_id: str | None = None,
+    method_key_to_unary_preparation: dict[str, str] | None = None,
 ):
     """Dispatch a single generate() call for one method key.
 
@@ -195,6 +242,11 @@ def run_method(
         tree_method=method_key_to_tree_method[method_key],
         prompt_id=prompt_id,
         collect_tree_data=collect_allocation_data,
+        unary_preparation=(
+            method_key_to_unary_preparation[method_key]
+            if method_key_to_unary_preparation is not None
+            else "lean"
+        ),
     )
 
 
@@ -327,6 +379,16 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--dflash2-unary-preparation",
+        choices=("lean", "shared", "both"),
+        default="lean",
+        help=(
+            "lean skips unused conditional scoring for unary trees; shared "
+            "reproduces the frozen shared-computation baseline; both benchmarks "
+            "lean and explicitly named _shared unary controls in the same process."
+        ),
+    )
+    parser.add_argument(
         "--collect-allocation-data",
         action="store_true",
         help="Persist DFlash2 proposal lattices and selected tree nodes.",
@@ -358,6 +420,8 @@ def main() -> None:
         parser.error("--timing-repetitions must be a positive integer")
 
     if args.draft_type == "dflash2":
+        if args.dflash2_unary_preparation == "both" and args.native_method_trajectories:
+            parser.error("the unary preparation audit requires controlled shared history")
         if args.temperature != 0.0:
             parser.error("DFlash2 benchmarking currently supports greedy decoding only")
         if args.flash_attn:
@@ -379,6 +443,8 @@ def main() -> None:
         except ValueError as exc:
             parser.error(str(exc))
     else:
+        if args.dflash2_unary_preparation != "lean":
+            parser.error("--dflash2-unary-preparation requires --draft-type dflash2")
         requested_tree_methods = []
         requested_tree_configs = None
 
@@ -467,6 +533,7 @@ def main() -> None:
     methods_to_run = [args.draft_type]
     method_key_to_tree_budget = {}
     method_key_to_tree_method = {}
+    method_key_to_unary_preparation = {}
     if args.draft_type == "dflash" and not args.flash_attn:
         ddtree_method_keys = [f"ddtree_tb{tree_budget}" for tree_budget in tree_budgets]
         methods_to_run.extend(ddtree_method_keys)
@@ -479,11 +546,15 @@ def main() -> None:
             for tree_method in requested_tree_methods
             for tree_budget in tree_budgets
         ]
-        for tree_method, tree_budget in tree_configs:
-            method_key = f"{tree_method}_tb{tree_budget}"
+        for method_key, (tree_method, tree_budget, preparation) in (
+            dflash2_execution_configs(
+                tree_configs, args.dflash2_unary_preparation
+            ).items()
+        ):
             methods_to_run.append(method_key)
             method_key_to_tree_budget[method_key] = tree_budget
             method_key_to_tree_method[method_key] = tree_method
+            method_key_to_unary_preparation[method_key] = preparation
 
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path,
@@ -517,6 +588,7 @@ def main() -> None:
         method_key_to_tree_budget=method_key_to_tree_budget,
         method_key_to_tree_method=method_key_to_tree_method,
         collect_allocation_data=args.collect_allocation_data,
+        method_key_to_unary_preparation=method_key_to_unary_preparation,
     )
     for method_key in methods_to_run:
         _ = run_method(
@@ -531,6 +603,7 @@ def main() -> None:
             method_key_to_tree_budget=method_key_to_tree_budget,
             method_key_to_tree_method=method_key_to_tree_method,
             collect_allocation_data=args.collect_allocation_data,
+            method_key_to_unary_preparation=method_key_to_unary_preparation,
         )
 
     save_path = Path(args.save_path) if args.save_path is not None else None
@@ -600,6 +673,9 @@ def main() -> None:
             "target_dtype": str(target.dtype),
             "draft_dtype": str(draft_model.dtype),
             "timing_repetitions": args.timing_repetitions,
+            "dflash2_unary_preparation": (
+                args.dflash2_unary_preparation if args.draft_type == "dflash2" else None
+            ),
             "method_order_seed_formula": (
                 "dataset_index * 1_000_003 + turn_index * 9_176 + repetition_index, "
                 "then random.Random(seed).shuffle(method_keys)"
@@ -743,6 +819,7 @@ def main() -> None:
                         method_key_to_tree_budget=method_key_to_tree_budget,
                         method_key_to_tree_method=method_key_to_tree_method,
                         collect_allocation_data=args.collect_allocation_data,
+                        method_key_to_unary_preparation=method_key_to_unary_preparation,
                         prompt_id=prompt_id,
                     )
                     result.repetition_index = repetition_index
@@ -755,6 +832,7 @@ def main() -> None:
             # every repetition is compared against the corresponding
             # baseline repetition and kept for paired timing comparisons.
             response = attach_repetition_bookkeeping(method_repetition_results)
+            compare_unary_preparations(response)
 
             comparable_to_baseline = (
                 not args.native_method_trajectories or turn_index == 0

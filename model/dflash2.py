@@ -41,6 +41,14 @@ from .dflash import DFlashDraftModel, Qwen3DFlashDecoderLayer
 
 
 @dataclass
+class DFlash2UnaryProposal:
+    candidate_ids: torch.Tensor
+    unary_scores: torch.Tensor
+    unary_logsumexp: torch.Tensor
+    full_unary_logits: torch.Tensor
+
+
+@dataclass
 class DFlash2Proposal:
     token_ids: torch.Tensor
     selected_candidate_indices: torch.Tensor
@@ -605,6 +613,18 @@ class DFlash2DraftModel(DFlashDraftModel):
             top_k=config.selector_top_k,
         )
         self.post_init()
+
+    def propose_unary(self, hidden_states: torch.Tensor) -> DFlash2UnaryProposal:
+        unary_logits = self.lm_head(hidden_states)
+        candidate_ids = unary_logits.topk(
+            self.candidate_selector.top_k, dim=-1
+        ).indices
+        return DFlash2UnaryProposal(
+            candidate_ids=candidate_ids,
+            unary_scores=unary_logits.gather(-1, candidate_ids),
+            unary_logsumexp=torch.logsumexp(unary_logits.float(), dim=-1),
+            full_unary_logits=unary_logits,
+        )
 
     def propose(
         self,
