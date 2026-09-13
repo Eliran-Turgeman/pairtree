@@ -330,11 +330,11 @@ esac
 if [[ "${PROFILE}" == "unary-smoke" || "${PROFILE}" == "unary-audit" ]]; then
   analysis_pairs=()
   if [[ "${PROFILE}" == "unary-smoke" ]]; then
-    analysis_pairs+=(--pair "GSM8K:${OUTPUT_DIR}/gsm8k_original_controlled.pt:${OUTPUT_DIR}/gsm8k_dflash2_controlled.pt")
+    analysis_pairs+=(--pair "GSM8K=${OUTPUT_DIR}/gsm8k_original_controlled.pt:${OUTPUT_DIR}/gsm8k_dflash2_controlled.pt")
   else
     for dataset in gsm8k humaneval; do
       for suffix in ab ba; do
-        analysis_pairs+=(--pair "${dataset}:${OUTPUT_DIR}/${dataset}_original_${suffix}.pt:${OUTPUT_DIR}/${dataset}_dflash2_${suffix}.pt")
+        analysis_pairs+=(--pair "${dataset}=${OUTPUT_DIR}/${dataset}_original_${suffix}.pt:${OUTPUT_DIR}/${dataset}_dflash2_${suffix}.pt")
       done
     done
   fi

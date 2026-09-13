@@ -5,6 +5,8 @@ import subprocess
 
 import pytest
 
+from analyze_step9_4b_throughput import parse_pair
+
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMIT = "a" * 40
@@ -91,6 +93,12 @@ def test_launcher_matrix_and_analysis(
         assert "--allow-partial" in analysis
         assert analysis.count("--pair") == benchmark_count // 2
         assert analysis[analysis.index("--bootstrap-samples") + 1] == "10000"
+        for index, argument in enumerate(analysis):
+            if argument == "--pair":
+                label, original, dflash2 = parse_pair(analysis[index + 1])
+                assert label in ("GSM8K", "gsm8k", "humaneval")
+                assert original.parent == dflash2.parent
+                assert original.name.replace("_original_", "_dflash2_") == dflash2.name
     if profile == "unary-audit":
         assert [call[call.index("--draft-type") + 1] for call in benchmarks] == [
             "dflash", "dflash2", "dflash2", "dflash",
